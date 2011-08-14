@@ -1,0 +1,9 @@
+<settings>
+<category label="30050">
+   <setting id="alarminterval" type="number" label="30000" default="5"/>
+  <!-- <setting id="ftupdates" type="number" label="30001" default="3"/>-->
+   <setting id="showfav" type="bool" label="30002" default="False"/>
+   <setting id="showchanges" type="bool" label="30003" default="False"/>
+</category>
+</settings>
+
