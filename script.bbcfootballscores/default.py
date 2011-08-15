@@ -18,11 +18,11 @@ __Website__ = ""
 _A_ = xbmcaddon.Addon( "script.bbcfootballscores" )
 _S_ = _A_.getSetting
 
-isrunning = _S_("scriptrunning")
+isrunning = _S_("scriptrunning") == "true"
 alarminterval = str(_S_("alarminterval"))
 #ftupdates = int(_S_("ftupdates"))
 pluginPath = _A_.getAddonInfo("path")
-showchanges = _S_("showchanges")
+showchanges = _S_("showchanges") == "true"
 
 try: watchedleagues = str(_S_("watchedleagues")).split("|")
 except: watchedleagues = []
@@ -150,7 +150,7 @@ def getJSONFixtures():
   
 def showMenu():
   global isrunning
-  isrunning = _S_("scriptrunning")
+  isrunning = _S_("scriptrunning") == "true"
   fixtures = getJSONFixtures()
 
   inputchoice = 0
@@ -175,7 +175,7 @@ def showMenu():
       if myleagues:
         userchoice.append("Show score list")
         userchoice.append("Start")
-      if isrunning == "True":
+      if isrunning:
         userchoice.append("Stop")
       userchoice.append("Settings")
       userchoice.append("Cancel")
@@ -196,7 +196,7 @@ def showMenu():
         break
       elif userchoice[inputchoice] == "Show score list":
         saveLeagues(watchedleagues)
-        if isrunning == "True":
+        if isrunning:
           listalarm = True
           cancelAlarm()
         else:
@@ -208,8 +208,8 @@ def showMenu():
         cancelAlarm()
         break
       elif userchoice[inputchoice] == "Settings":
-#_A_.openSettings()
-        setFavouriteTeam(fixtures)
+        _A_.openSettings()
+        #setFavouriteTeam(fixtures)
         break
       else:
         break
@@ -233,14 +233,14 @@ def saveLeagues(leaguelist):
   
 def setAlarm():
   xbmc.executebuiltin('AlarmClock(bbcfootballscorealarm,RunScript(script.bbcfootballscores,alarm=True),' + alarminterval + ',true)')
-  _A_.setSetting(id="scriptrunning",value="True")
+  _A_.setSetting(id="scriptrunning",value="true")
   global isrunning
   isrunning = True
   _A_.setSetting(id="rundate",value=gamedate)
   
 def cancelAlarm():
   xbmc.executebuiltin('CancelAlarm(bbcfootballscorealarm,true)')
-  _A_.setSetting(id="scriptrunning",value="False")
+  _A_.setSetting(id="scriptrunning",value="false")
   global isrunning
   isrunning = False
   
