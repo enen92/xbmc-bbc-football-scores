@@ -20,7 +20,7 @@ _S_ = _A_.getSetting
 
 isrunning = _S_("scriptrunning")
 alarminterval = str(_S_("alarminterval"))
-ftupdates = int(_S_("ftupdates"))
+#ftupdates = int(_S_("ftupdates"))
 pluginPath = _A_.getAddonInfo("path")
 showchanges = _S_("showchanges")
 
@@ -156,18 +156,23 @@ def showMenu():
   inputchoice = 0
   userchoice = []
   while True:
+      myleagues = False
       leagues = []
       userchoice = []
       for league in fixtures["competition"]:
         # if int(league["id"]) == shieldid:
           # for match in league["match"]:
             # print league["name"] + ": " + match["homeTeam"]["name"] + " " + match["homeTeam"]["score"] + " - " + match["awayTeam"]["score"] + " " + match["awayTeam"]["name"]
-        leagues.append([league["name"],league["id"]])
-        if league["id"] in watchedleagues:
-          userchoice.append("*" + league["name"])
-        else:
-          userchoice.append(league["name"])
-      if len(watchedleagues) > 0:
+        try:
+          leagues.append([league["name"],league["id"]])
+          if league["id"] in watchedleagues:
+            userchoice.append("*" + league["name"])
+            myleagues = True
+          else:
+            userchoice.append(league["name"])
+        except:
+          userchoice.append("No matches today")
+      if myleagues:
         userchoice.append("Show score list")
         userchoice.append("Start")
       if isrunning == "True":
@@ -177,7 +182,7 @@ def showMenu():
       
       inputchoice = xbmcgui.Dialog().select("Choose competition", userchoice)
       global watchedleagues
-      if (inputchoice >=0 and not userchoice[inputchoice] == "Start" and not userchoice[inputchoice] == "Stop" and not userchoice[inputchoice] == "Cancel" and not userchoice[inputchoice] == "Settings" and not userchoice[inputchoice] == "Show score list"):
+      if (inputchoice >=0 and not userchoice[inputchoice] == "Start" and not userchoice[inputchoice] == "Stop" and not userchoice[inputchoice] == "Cancel" and not userchoice[inputchoice] == "Settings" and not userchoice[inputchoice] == "Show score list" and not userchoice[inputchoice] == "No matches today"):
         if leagues[inputchoice][1] in watchedleagues:
           watchedleagues.remove(leagues[inputchoice][1])
         else:  
