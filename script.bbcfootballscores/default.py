@@ -144,8 +144,20 @@ def getJSONFixtures():
   #myjson = os.path.join(pluginPath, "examplejson.txt")
   #f = open(myjson, "r")
   #jsonresult = f.read()
+  fixtures = ""
   
-  fixtures = json.loads(jsonresult)
+    
+  if jsonresult[0:4] == "<!--":
+    a = string.find(jsonresult, "-->")
+    stra = jsonresult[a+3:]
+    if "<!--" in stra:
+      a = string.find(stra, "<!--")
+      strb = stra[0:a] + "}"
+      print strb
+      fixtures = json.loads(strb)
+  else:
+    fixtures = json.loads(jsonresult)
+      
   return fixtures
   
 def showMenu():
@@ -313,6 +325,7 @@ def matchStatus(match):
   
 def showScores():
   fixtures = getJSONFixtures()
+  setWindowSummary(fixtures)
   myleagues = _A_.getSetting("watchedleagues").split("|")
   for league in fixtures["competition"]:
     if league["id"] in myleagues:
@@ -337,18 +350,30 @@ def showScoreList(listalarm):
         scorelist.append(score)
   latestscores = xbmcgui.Dialog().select("Latest scores",scorelist)
   if listalarm: setAlarm()
+  
+def setWindowSummary(fixtures):
+  updateText = "[B]LATEST[/B] - "
+  myleagues = _A_.getSetting("watchedleagues").split("|")
+  for league in fixtures["competition"]:
+    if league["id"] in myleagues:
+      updateText = updateText + league["name"] + ": "
+      for match in league["match"]:
+        updateText = updateText + getScoreString(match) + " (" + match["statusCode"] + ")  "
+  
+  if len(updateText) > 9:
+    xbmc.executebuiltin('Skin.SetString(bbcscores.summary, %s)' % (updateText))
         
 def saveScores():
   savestring = ""
   for savematch in savescores:
-    savestring += savematch[0] + "|" + savematch[1] + "|" + savematch[2] + "|" + savematch[3] + "&"
+    savestring += savematch[0] + "|" + savematch[1] + "|" + savematch[2] + "|" + savematch[3] + "~"
   _A_.setSetting(id="savescores", value=savestring[:len(savestring)-1])
     
 def getSavedScores():
   savedscores = str(_S_("savescores"))
   if len(savedscores) >0 :
     a = AutoVivification()
-    for savedMatch in savedscores.split("&"):
+    for savedMatch in savedscores.split("~"):
       matchDetails = savedMatch.split("|")
       Teams = matchDetails[0]
       Home = matchDetails[1]
