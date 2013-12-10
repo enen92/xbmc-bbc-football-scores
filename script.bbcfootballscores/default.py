@@ -77,7 +77,7 @@ def debuglog(message):
     '''Send DEBUG level notices to XBMC's log.'''
     xbmc.log("%s: %s" % ("BBC Football Scores",
                          message),
-                         level=xbmc.LOGNOTICE)
+                         level=xbmc.LOGDEBUG)
     
 def getPage(url):
     '''Basic function to return web page.'''
