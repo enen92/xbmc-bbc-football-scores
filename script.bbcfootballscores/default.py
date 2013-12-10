@@ -1,4 +1,18 @@
-import urllib
+'''
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+'''
+
 import urllib2
 import string
 import sys
@@ -6,400 +20,486 @@ import re
 import time
 import os
 import datetime
-import simplejson as json
-from BeautifulSoup import BeautifulSoup, SoupStrainer
-import xbmc, xbmcgui, xbmcplugin, xbmcaddon
+from BeautifulSoup import BeautifulSoup
 
+if sys.version_info >=  (2, 7):
+    import json as json
+else:
+    import simplejson as json 
+
+import xbmc
+import xbmcgui
+# import xbmcplugin
+import xbmcaddon
+
+from match import League
+
+########################################################################
 __ScriptName__ = "BBC Football Score Scraper"
-__ScriptVersion__ = "0.1.0"
+__ScriptVersion__ = "0.2.0"
 __Author__ = "el_Paraguayo"
-__Website__ = ""
+__Website__ = "https://github.com/elParaguayo/"
+########################################################################
 
+# Set the addon environment
 _A_ = xbmcaddon.Addon( "script.bbcfootballscores" )
 _S_ = _A_.getSetting
 
-isrunning = _S_("scriptrunning") == "true"
+# Load some user settings
 alarminterval = str(_S_("alarminterval"))
-#ftupdates = int(_S_("ftupdates"))
 pluginPath = _A_.getAddonInfo("path")
 showchanges = _S_("showchanges") == "true"
 
-try: watchedleagues = str(_S_("watchedleagues")).split("|")
-except: watchedleagues = []
+try: 
+    watchedleagues = json.loads(str(_S_("watchedleagues")))
+except: 
+    watchedleagues = []
 
 rundate = str(_S_("rundate"))
 gamedate = datetime.date.today().strftime("%y%m%d")
+leaguedata = League()
 
-
-
-
-savescores = []
-
-#Parse command parameters - thanks to TV Tunes script for this bit of code!!
+# Parse command parameters
+# Thanks to TV Tunes script for this bit of code!!
 try:
     # parse sys.argv for params
-    try:params = dict( arg.split( "=" ) for arg in sys.argv[ 1 ].split( "&" ) )
-    except:params =  dict( sys.argv[ 1 ].split( "=" ))
+    try:
+        params = dict(arg.split("=") for arg in sys.argv[1].split("&"))
+    except:
+        params =  dict(sys.argv[1].split("="))
 except:
     # no params passed
     params = {}   
 
-class AutoVivification(dict):
-    """Implementation of perl's autovivification feature."""
-    def __getitem__(self, item):
-        try:
-            return dict.__getitem__(self, item)
-        except KeyError:
-            value = self[item] = type(self)()
-            return value    
+  
+# Some basic utilities for the script
+def debuglog(message):
+    '''Send DEBUG level notices to XBMC's log.'''
+    xbmc.log("%s: %s" % ("BBC Football Scores",
+                         message),
+                         level=xbmc.LOGNOTICE)
     
 def getPage(url):
-  user_agent = 'Mozilla/5 (Solaris 10) Gecko'
-  headers = { 'User-Agent' : user_agent }
-  #values = {'s' : sys.argv[1] }
-  #data = urllib.urlencode(values)
-  request = urllib2.Request(url)
-  response = urllib2.urlopen(request)
-  the_page = response.read()
-  return the_page
+    '''Basic function to return web page.'''
+    page = None
+    try:
+        user_agent = 'Mozilla/5 (Solaris 10) Gecko'
+        headers = { 'User-Agent' : user_agent }
+        request = urllib2.Request(url)
+        response = urllib2.urlopen(request)
+        page = response.read()
+    except:
+        pass
+        
+    return page
 
-def getScores(soupedPage):  
-  results = soupedPage.findAll('li', attrs={'id':re.compile(r'liveScoresSummary')})
-  #print results
-  source = ''
-  return results
+def isRunning():
+    '''Flag for determining if score script is running.'''
+    return _S_("scriptrunning") == "true"
 
-def parseScores(results):
-  games = []
-  scorearray=[]
-  for result in results:
-    score=result.findAll('span',text=True)
-    games.append((score))
-
-  for game in games:
-    score =  game[0] + " (" + game[1] + "-" + game[3] + ") " + game[4]
-    scorearray.append(score)
-    if game[5] == "FT":
-      status = "Full Time"
-      imagelink = os.path.join(pluginPath, "images", "ft.jpg")
-    elif game[5] == "L":
-      status = "Latest"
-      imagelink = os.path.join(pluginPath, "images" ,"latest.jpg")
-    elif game[5] == "HT":
-      status = "Half Time"
-      imagelink = os.path.join(pluginPath, "images", "ht.jpg")
-    else:
-      status = "Not Started"
-      score =  game[0] + " (x - x) " + game[4]
-      imagelink = os.path.join(pluginPath, "images" , "notstarted.jpg")
-    xbmc.executebuiltin('Notification(' + status + ',' + score + ',2000,' + imagelink + ')')
-    time.sleep(2)
-    
-  #latestscore=xbmcgui.Dialog().select("Latest Scores", scorearray)
-    
-def getGoalFlashes(soupedPage):
-  liveSummary = soupedPage.findAll('div', attrs={'id':re.compile(r'clockwatch')})
-  goalFlashes = []
-  #for flash in liveSummary[0]:
-  goalFlash = liveSummary[0].findAll('b', text=re.compile(r'GOALFLASH'))
-  for goal in goalFlash:
-    print goal
-    
-def getLinks():
-  liveLinks = []
-  linkPair=[]
-  footy = getPage("http://news.bbc.co.uk/sport1/hi/football/")
-  #footy = getPage("http://news.bbc.co.uk/sport1/hi/football/eng_div_1/default.stm")
-  myPage = BeautifulSoup(footy)
-  live=re.compile(r'\bLive')
-  summary=re.compile(r'\bhappened')
-  for link in myPage.findAll('a'):
-    #reg_link = re.sub('\s\s+',' ', link.contents)
-    #print reg_link
-    #print link
-    if (live.search(str(link.contents)) or summary.search(str(link.contents))):
-      for attr, value in link.attrs:
-        if attr=="href":
-          reg_link = re.sub('\s\s+',' ', str(link.contents[0]))
-          if (len(reg_link) > 6 and not reg_link == "Live Videprinter"):
-            liveLinks.append([reg_link,value])
-  return liveLinks
-
-def getScrapePage():  
-  liveLinks = []
-  userList = []
-  liveLinks = getLinks()
-  for linktext, linkaddress in liveLinks:
-    userList.append(linktext)
-  
-  choiceid = xbmcgui.Dialog().select("Select link",userList)
-  link = liveLinks[choiceid][1]
-  if link[:1] == "/":
-    link = "http://news.bbc.co.uk" + link
-  print link
-  return link
-
-def getJSONFixtures():
-  jsonresult = getPage('http://news.bbc.co.uk//sport/hi/english/static/football/statistics/collated/live_scores_summary_all.json')
-  #myjson = os.path.join(pluginPath, "examplejson.txt")
-  #f = open(myjson, "r")
-  #jsonresult = f.read()
-  fixtures = ""
-  
-    
-  if jsonresult[0:4] == "<!--":
-    a = string.find(jsonresult, "-->")
-    stra = jsonresult[a+3:]
-    if "<!--" in stra:
-      a = string.find(stra, "<!--")
-      strb = stra[0:a] + "}"
-      print strb
-      fixtures = json.loads(strb)
-  else:
-    fixtures = json.loads(jsonresult)
-      
-  return fixtures
-  
 def showMenu():
-  global isrunning
-  isrunning = _S_("scriptrunning") == "true"
-  fixtures = getJSONFixtures()
-
-  inputchoice = 0
-  userchoice = []
-  while True:
-      myleagues = False
-      leagues = []
-      userchoice = []
-      for league in fixtures["competition"]:
-        # if int(league["id"]) == shieldid:
-          # for match in league["match"]:
-            # print league["name"] + ": " + match["homeTeam"]["name"] + " " + match["homeTeam"]["score"] + " - " + match["awayTeam"]["score"] + " " + match["awayTeam"]["name"]
-        try:
-          leagues.append([league["name"],league["id"]])
-          if league["id"] in watchedleagues:
-            userchoice.append("*" + league["name"])
-            myleagues = True
-          else:
-            userchoice.append(league["name"])
-        except:
-          userchoice.append("No matches today")
-      if myleagues:
-        userchoice.append("Show score list")
+    '''Set up our main menu.'''
+    
+    # Create list of menu items
+    userchoice = []
+    userchoice.append("Select leagues")
+    if not isRunning():
         userchoice.append("Start")
-      if isrunning:
+    else:
+        userchoice.append("Show scores")
         userchoice.append("Stop")
-      userchoice.append("Settings")
-      userchoice.append("Cancel")
-      
-      inputchoice = xbmcgui.Dialog().select("Choose competition", userchoice)
-      global watchedleagues
-      if (inputchoice >=0 and not userchoice[inputchoice] == "Start" and not userchoice[inputchoice] == "Stop" and not userchoice[inputchoice] == "Cancel" and not userchoice[inputchoice] == "Settings" and not userchoice[inputchoice] == "Show score list" and not userchoice[inputchoice] == "No matches today"):
-        if leagues[inputchoice][1] in watchedleagues:
-          watchedleagues.remove(leagues[inputchoice][1])
-        else:  
-          watchedleagues.append(leagues[inputchoice][1])
-      elif userchoice[inputchoice] == "Start":
+    userchoice.append("Settings")
+    userchoice.append("Cancel")
+    
+    # Display the menu  
+    inputchoice = xbmcgui.Dialog().select("BBC football scores", 
+                                           userchoice)
+    # Process menu actions
+    
+    # User wants to get list of leagues    
+    if userchoice[inputchoice] == "Select leagues":
+        selectLeagues()
+    
+    # User wants to start script and begin receiving updates
+    elif userchoice[inputchoice] == "Start":
         saveLeagues(watchedleagues)
         cancelAlarm()
         setAlarm()
         showScores()
-        #showScoreList()
-        break
-      elif userchoice[inputchoice] == "Show score list":
+
+    # Get list of current scores in selected leagues
+    elif userchoice[inputchoice] == "Show scores":
         saveLeagues(watchedleagues)
-        if isrunning:
-          listalarm = True
-          cancelAlarm()
+        if isRunning():
+            listalarm = True
+            cancelAlarm()
         else:
-          listalarm = False
-        
+            listalarm = False
+
         showScoreList(listalarm)
-        break
-      elif userchoice[inputchoice] == "Stop":
+
+    # Stop receiving updates
+    elif userchoice[inputchoice] == "Stop":
         cancelAlarm()
-        break
-      elif userchoice[inputchoice] == "Settings":
+ 
+    # Edit user preferences
+    elif userchoice[inputchoice] == "Settings":
         _A_.openSettings()
-        #setFavouriteTeam(fixtures)
-        break
-      else:
-        break
+
+
+def selectLeagues():
+    '''Get list of available leagues and allow user to select those
+       leagues from which they want to receive updates.
+    '''
+    
+    # Get list of leagues
+    myleaguedata = leaguedata.getLeagues()
+
+    finishedSelection = False
+
+    # Start loop - will be exited once user confirms selection or
+    # cancels
+    while not finishedSelection:
+        userchoice = []
+        myleagues = False
+        leagues = []
+
+        # Loop through leagues
+        for league in myleaguedata:
+        
+            try:
+                leagues.append([league["name"],int(league["id"])])
+                
+                # Mark the league if it's one the user has previously
+                # selected
+                if int(league["id"]) in watchedleagues:
+                    userchoice.append("*" + league["name"])
+                    myleagues = True
+                else:
+                    userchoice.append(league["name"])
+            
+            # Hopefully we don't end up here...
+            except:
+              userchoice.append("Error loading data")
+        
+        userchoice.append("Done")
+      
+        # Display the list
+        inputchoice = xbmcgui.Dialog().select("Choose league(s)", 
+                                              userchoice)
+        
+        
+        # Hmmm, might need to get rid of the "global" declaration
+        # I know these are frowned upon!
+        global watchedleagues
+        if (inputchoice >=0 and not userchoice[inputchoice] == "Done" 
+            and not userchoice[inputchoice] == "Error loading data"):
+            
+            print "WatchedLeagues:", str(watchedleagues)
+            if leagues[inputchoice][1] in watchedleagues:
+                watchedleagues.remove(leagues[inputchoice][1])
+            else:  
+                watchedleagues.append(leagues[inputchoice][1])
+                
+        elif userchoice[inputchoice] == "Done":
+            saveLeagues(watchedleagues)
+            finishedSelection = True
+            showMenu()
+            
+        elif inputchoice == -1:
+            finishedSelection = True
+            showMenu()
+            
 
 def getScoreString(match):
-  score = match["homeTeam"]["name"] + " " + match["homeTeam"]["score"] + " - " + match["awayTeam"]["score"] + " " + match["awayTeam"]["name"]
-  return score
+    '''Provide a tidy string object showing match score.
+       e.g. Chelsea 3 - 1 Everton (L)
+    '''
+    score = "%s %s - %s %s (%s)" % (match["hometeam"],
+                                    match["homescore"],
+                                    match["awayscore"],
+                                    match["awayteam"],
+                                    match["status"])
+    return score
         
-def setFavouriteTeam(fixtures):
-  teamlist = []
-  for league in fixtures["competition"]:
-    for match in league["match"]:
-      teamlist.append(match["homeTeam"]["name"])
-      teamlist.append(match["awayTeam"]["name"])
-  myteam = xbmcgui.Dialog().select("Pick team", sorted(teamlist))
-
-      
 def saveLeagues(leaguelist):
-  delimited = "|".join(leaguelist)
-  _A_.setSetting(id="watchedleagues",value=delimited)
+    '''Save the list of chosen leagues.
+       Saved in JSON format.
+    '''
+    rawdata = json.dumps(leaguelist)
+    _A_.setSetting(id="watchedleagues",value=rawdata)
   
 def setAlarm():
-  xbmc.executebuiltin('AlarmClock(bbcfootballscorealarm,RunScript(script.bbcfootballscores,alarm=True),' + alarminterval + ',true)')
-  _A_.setSetting(id="scriptrunning",value="true")
-  global isrunning
-  isrunning = True
-  _A_.setSetting(id="rundate",value=gamedate)
+    '''Sets an alarm to run the script at the time specified by the
+       user's preferences.
+       Calls the script with the "alarm" flag so that menus are not
+       shown.
+    '''
+    xbmc.executebuiltin('%s(%s,%s(%s,%s),%s,%s)' % ("AlarmClock",
+                                                    "bbcfootballalarm",
+                                                    "RunScript",
+                                                    "script.bbcfootballscores",
+                                                    "alarm=True",
+                                                    alarminterval,
+                                                    "true"))
+
+    _A_.setSetting(id="scriptrunning",value="true")
+    #~ global isrunning
+    #~ isrunning = True
+    _A_.setSetting(id="rundate",value=gamedate)
   
 def cancelAlarm():
-  xbmc.executebuiltin('CancelAlarm(bbcfootballscorealarm,true)')
-  _A_.setSetting(id="scriptrunning",value="false")
-  global isrunning
-  isrunning = False
+    '''Cancel the alarm so no more score updates are provided.'''
+    xbmc.executebuiltin('CancelAlarm(bbcfootballalarm,true)')
+    _A_.setSetting(id="scriptrunning",value="false")
   
 def getStatusInfo(match):
-  statuscode = match["statusCode"]
-  statuschange = False
-  if goalScored(match):
-    imagelink = os.path.join(pluginPath, "images", "goal.jpg")
-    statuschange = True
-    statustext = "Goal!"
-  elif statuscode == "FT":
-    imagelink = os.path.join(pluginPath, "images", "ft.jpg")
-    statustext = "Full Time"
-  elif statuscode == "L":
-    imagelink = os.path.join(pluginPath, "images" ,"latest.jpg")
-    statustext = "Latest"
-  elif statuscode == "HT":
-    imagelink = os.path.join(pluginPath, "images", "ht.jpg")
-    statustext = "Half Time"
-  else:
-    imagelink = os.path.join(pluginPath, "images" , "notstarted.jpg")
-    statustext = "Fixture (" + statuscode + ")"
-
-  if statuschanged(match):
-    statuschange = True
+    '''Process the match info.'''
+    debuglog("Processing match: %s" % (str(match)))
+    statuscode = match["status"]
+    statuschange = False
     
-  return statustext, imagelink, statuschange
+    # Has there been a goal?
+    if goalScored(match):
+        debuglog("Gooooooooooaaaaaaaaaaallllllllll!")
+        imagelink = os.path.join(pluginPath, "images", "goal.jpg")
+        statuschange = True
+        statustext = "Goal!"
+        
+    # If it's full time, set the appropriate image
+    elif statuscode == "FT":
+        debuglog("Full time.")
+        imagelink = os.path.join(pluginPath, "images", "ft.jpg")
+        statustext = "Full Time"
+        
+    # If the game is playing, set the appropriate image
+    elif statuscode == "L":
+        debuglog("Latest score")
+        imagelink = os.path.join(pluginPath, "images" ,"latest.jpg")
+        statustext = "Latest"
+        
+    # If it's half time, set the appropriate image
+    elif statuscode == "HT":
+        debuglog("Half time")
+        imagelink = os.path.join(pluginPath, "images", "ht.jpg")
+        statustext = "Half Time"
+        
+    # Anything else means the game probably hasn't started
+    else:
+        debuglog("Not started.")
+        imagelink = os.path.join(pluginPath, "images" , "notstarted.jpg")
+        statustext = "Fixture (" + statuscode + ")"
+
+    # Has the match status changed?
+    if statuschanged(match):
+        statuschange = True
+    
+    return statustext, imagelink, statuschange
 
 def goalScored(match):
-  goal = False
-  matchname = match["homeTeam"]["name"] + match["awayTeam"]["name"]
-  try:
-    myHome = int(myMatches[matchname]['homeScore'])
-    myAway = int(myMatches[matchname]['awayScore'])
-  except:
-    myHome = 0
-    myAway = 0
+    '''Has a goal been scored?'''
+    goal = False
+    
+    # Look up match scores from those saved at last update
+    matchname = match["hometeam"] + match["awayteam"]
+    
+    try:
+        myHome = int(myMatches[matchname]['homescore'])
+        myAway = int(myMatches[matchname]['awayscore'])
+    except:
+        myHome = 0
+        myAway = 0
   
-  if not sameDay and (int(match["homeTeam"]["score"]) >0 or int(match["awayTeam"]["score"]) >0):
-    goal = True
-  elif sameDay:
-      if not (myHome == int(match["homeTeam"]["score"]) and myAway == int(match["awayTeam"]["score"])):
+    # If it's a different day and the goals are bigger than 0
+    # then Goooooooooooooaaaaaaaaaallllllllllll!
+    if not sameDay and (int(match["homescore"]) >0 
+                         or int(match["awayscore"]) >0):
         goal = True
-  
-  return goal
+        
+    # or if it is the same day but either the the home score or away
+    # score is different then Gooooooooooaaaaaaaaaalllllllllll!
+    elif sameDay:
+        if not (myHome == int(match["homescore"]) 
+                and myAway == int(match["awayscore"])):
+            goal = True
+    
+    debuglog("Saved score %s-%s. Current score %s-%s" % (myHome,
+                                                         myAway,
+                                                         match["homescore"],
+                                                         match["awayscore"]))
+    
+    # return Gooooooooooaaaaaaaaaallllllllll!
+    return goal
   
 def statuschanged(match):
-  statuschange = False
-  matchname = match["homeTeam"]["name"] + match["awayTeam"]["name"] 
-  try:
-    myStatus = myMatches[matchname]['status']
-  except:
-    myStatus = "X"
-  
-  if sameDay and not myStatus == match["statusCode"]:
-    statuschange = True
-  elif not sameDay:
-    statuschange = True
+    '''Has the status changed? E.g. HT -> L?'''
+    statuschange = False
     
-  return statuschange
+    # Look up status from previously saved data
+    matchname = match["hometeam"]+ match["awayteam"]
+    try:
+        myStatus = myMatches[matchname]['status']
+    except:
+        # if we can't find match then make up a status
+        myStatus = "X"
+
+    # Has the status changed?
+    if sameDay and not myStatus == match["status"]:
+        statuschange = True
+    elif not sameDay:
+        statuschange = True
+
+    debuglog("Saved status: %s. Current status: %s" % (myStatus,
+                                                    match["status"]))
+
+    return statuschange
   
   
-def matchStatus(match):
-  status = []
-  status.append(match["homeTeam"]["name"] + match["awayTeam"]["name"])
-  status.append(match["homeTeam"]["score"])
-  status.append(match["awayTeam"]["score"])
-  status.append(match["statusCode"])
-  return status
+#~ def matchStatus(match):
+    #~ status = []
+    #~ status.append(match["homeTeam"]["name"] + match["awayTeam"]["name"])
+    #~ status.append(match["homeTeam"]["score"])
+    #~ status.append(match["awayTeam"]["score"])
+    #~ status.append(match["statusCode"])
+    #~ return status
   
 def showScores():
-  fixtures = getJSONFixtures()
-  setWindowSummary(fixtures)
-  myleagues = _A_.getSetting("watchedleagues").split("|")
-  for league in fixtures["competition"]:
-    if league["id"] in myleagues:
-      for match in league["match"]:
-        score = getScoreString(match)
-        leaguename = league["name"]
-        statustext, statusimage, statuschange = getStatusInfo(match)
-        if ((showchanges and statuschange) or not showchanges):
-          xbmc.executebuiltin('Notification(' + statustext + ',' + score + ',2000,' + statusimage + ')')
-          time.sleep(2)
-        global savescores
-        savescores.append(matchStatus(match))
+    '''Main function for displaying latest scores.'''
+
+    # List for saving matches
+    matchlist = []
+    matchdict = {}
+
+    # Get the list of leagues we want scores for
+    myleagues = json.loads(_A_.getSetting("watchedleagues"))
+    
+    # Loop through the leagues
+    for myleague in myleagues:
+        
+        # Get the matches in the league
+        matches = leaguedata.getScores(myleague)
+        
+        # Loop through the matches
+        for match in matches["matches"]:
+            
+            # We need to save the match in a dictionary with a unique ID
+            # matchdict = {}
+
+            # Process the match
+            statustext, statusimage, statuschange = getStatusInfo(match)
+                        
+            # Do we need to show an update?
+            if ((showchanges and statuschange) or not showchanges):
+                
+                # Get the formatted match string
+                score = getScoreString(match)
+                
+                # And display notification in xbmc
+                xbmc.executebuiltin('Notification(%s,%s,2000,%s)' % (
+                                                        statustext,
+                                                        score, 
+                                                        statusimage))
+                
+                # Sleep for 2 seconds
+                # This shouldn't be necessary as XBMC should queue
+                # the notifications
+                time.sleep(2)
+            
+            # Create the ID
+            matchid = match["hometeam"] + match["awayteam"]
+            
+            # Create the dict
+            matchdict[matchid] = match
+            
+            # Add the match to our list    
+            # matchlist.append(matchdict)
+    
+    # Save the scores (so we can check for updates when script next runs)
+    saveScores(matchdict)
 
 def showScoreList(listalarm):
-  scorelist = []        
-  fixtures = getJSONFixtures()
-  myleagues = _A_.getSetting("watchedleagues").split("|")
-  for league in fixtures["competition"]:
-    if league["id"] in myleagues:
-      for match in league["match"]:
-        score = getScoreString(match) + " (" + match["statusCode"] + ")"
-        scorelist.append(score)
-  latestscores = xbmcgui.Dialog().select("Latest scores",scorelist)
-  if listalarm: setAlarm()
+    #~ scorelist = []        
+    #~ fixtures = getJSONFixtures()
+    #~ myleagues = _A_.getSetting("watchedleagues").split("|")
+    #~ for league in fixtures["competition"]:
+        #~ if league["id"] in myleagues:
+            #~ for match in league["match"]:
+                #~ score = getScoreString(match) + " (" + match["statusCode"] + ")"
+                #~ scorelist.append(score)
+    #~ latestscores = xbmcgui.Dialog().select("Latest scores",scorelist)
+    #~ if listalarm: setAlarm()
+    pass
   
 def setWindowSummary(fixtures):
-  updateText = "[B]LATEST[/B] - "
-  myleagues = _A_.getSetting("watchedleagues").split("|")
-  for league in fixtures["competition"]:
-    if league["id"] in myleagues:
-      updateText = updateText + league["name"] + ": "
-      for match in league["match"]:
-        updateText = updateText + getScoreString(match) + " (" + match["statusCode"] + ")  "
-  
-  if len(updateText) > 9:
-    xbmc.executebuiltin('Skin.SetString(bbcscores.summary, %s)' % (updateText))
+    #~ updateText = "[B]LATEST[/B] - "
+    #~ myleagues = _A_.getSetting("watchedleagues").split("|")
+    #~ for league in fixtures["competition"]:
+        #~ if league["id"] in myleagues:
+            #~ updateText = updateText + league["name"] + ": "
+            #~ for match in league["match"]:
+                #~ updateText = updateText + getScoreString(match) + " (" + match["statusCode"] + ")  "
+  #~ 
+    #~ if len(updateText) > 9:
+        #~ xbmc.executebuiltin('Skin.SetString(bbcscores.summary, %s)' % (updateText))
+    pass
         
-def saveScores():
-  savestring = ""
-  for savematch in savescores:
-    savestring += savematch[0] + "|" + savematch[1] + "|" + savematch[2] + "|" + savematch[3] + "~"
-  _A_.setSetting(id="savescores", value=savestring[:len(savestring)-1])
+def saveScores(savescores):
+    '''Save the scores from the selected leagues so the script can check
+       for updates when next run.
+    '''
+    # Convert list to a string
+    savestring = json.dumps(savescores)
+    
+    # and save it
+    _A_.setSetting(id="savescores", value=savestring)
     
 def getSavedScores():
-  savedscores = str(_S_("savescores"))
-  if len(savedscores) >0 :
-    a = AutoVivification()
-    for savedMatch in savedscores.split("~"):
-      matchDetails = savedMatch.split("|")
-      Teams = matchDetails[0]
-      Home = matchDetails[1]
-      Away = matchDetails[2]
-      Status = matchDetails[3]
-      a[Teams]['homeScore'] = Home
-      a[Teams]['awayScore'] = Away
-      a[Teams]['status'] = Status
-  else:
-    a = {}
-  return a  
+    '''Load previously saved scores.'''
+    try:
+        scores = json.loads(str(_S_("savescores")))
+    except:
+        scores = []
+    return scores
 
 
+########################################################################
+# This is where we start!
+########################################################################
+
+debuglog("Starting script...")
+debuglog("Script called with following parameters: %s" % (str(params)))
+
+# If it's the script is running on the same day
+# set appropriate flag and try to load pevious scores
 if rundate == gamedate:
-  sameDay = True
-  myMatches = getSavedScores()
+    sameDay = True
+    myMatches = getSavedScores()
+    debuglog("Loaded saved scores: %s" % str(myMatches))
+
+# If it's a new day, we can disregard previously saved matches
 else:
-  sameDay = False  
-        
+    sameDay = False
+    myMatches = []
+    debuglog("Saved scores not loaded.")  
+
+
+# Was the script called from an alarm?        
 if params.get("alarm", False):
-  setAlarm()
-  showScores()
-  saveScores()
+    
+    debuglog("Script called by alarm")
+    
+    # If so, set the next alarm
+    setAlarm()
+    # And check for new score alerts
+    showScores()
+
 else:
-  showMenu()
-  saveScores()
+    
+    debuglog("User called script")
+    
+    # If not, show the menu
+    showMenu()
+
         
   
 #soup = getPage(getScrapePage())

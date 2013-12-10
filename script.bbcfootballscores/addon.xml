@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addon id="script.bbcfootballscores"
        name="BBC Football Scores"
-       version="0.1"
+       version="0.2.0"
        provider-name="el_Paraguayo">
   <requires>
-    <import addon="xbmc.python" version="1.0"/>
+    <import addon="xbmc.python" version="2.1.0"/>
     <import addon="script.module.simplejson" version="2.0.10"/>
+    <import addon="script.module.beautifulsoup" version="3.2.1"/> 
   </requires>
   <extension point="xbmc.python.script"
              library="default.py" />
@@ -15,4 +16,7 @@
     <summary lang="en">BBC Football Scores</summary>
     <description lang="en">Basic scraper to display live scores and goalflashes.</description>
   </extension>
+  <email>elparaguayoxbmc at gmail dot com</email>
+  <website>https://github.com/elparaguayo</website>
+  <forum>http://forum.xbmc.org/showthread.php?tid=107795</forum>
 </addon>
