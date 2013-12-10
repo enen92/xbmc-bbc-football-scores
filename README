@@ -1,6 +1,6 @@
 Addon Name: BBC Football Scores
 Author: el_Paraguayo
-Version: 0.1
+Version: 0.2
 
 What it does: Provides notifications of football scores in XBMC. Data pulled from BBC website.
 
@@ -10,5 +10,5 @@ To do:
 
 Changelog:
 
-Version 0.1:
--First version - basic functionality.
+Version 0.2:
+-Updated for new BBC score format
